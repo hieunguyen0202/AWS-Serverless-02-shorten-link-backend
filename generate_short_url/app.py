@@ -14,18 +14,33 @@ logger.setLevel(logging.INFO)
 #   "url": "https://www.example.com"
 # }
 def lambda_handler(event, context):
-    logger.info('Event structure: ' + json.dumps(event))  # Log the event structure
-    
+    logger.info('Event structure: ' + json.dumps(event))
+
     body = None
-    if (event['body']) and (event['body'] is not None):
-        body = json.loads(event['body'])
+    if 'body' in event and event['body'] is not None:
+        try:
+            body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
+        except json.JSONDecodeError:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'status': 'error', 'message': 'Invalid JSON format'})
+            }
+    elif 'url' in event:  # This is for test event directly using {"url": "..."}
+        body = event
     else:
         return {
             'statusCode': 400,
-            'body': json.dumps({'status': 'error', 'message': 'Request body is empty'})
+            'body': json.dumps({'status': 'error', 'message': 'Request body is missing'})
         }
-    original_url = body['url']
 
+    original_url = body.get('url')
+    if not original_url:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'status': 'error', 'message': 'URL is required'})
+        }
+
+    # Generate short URL
     short_url = ''.join(random.choices(string.ascii_letters + string.digits, k=15))
 
     dynamodb = boto3.resource('dynamodb')
@@ -41,9 +56,9 @@ def lambda_handler(event, context):
         return {
             'statusCode': 200,
             'headers': {
-                'Access-Control-Allow-Origin': '*',  # Allow requests from any origin
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',  # Allow the Content-Type header
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',  # Allow OPTIONS and POST methods
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             },
             'body': json.dumps({'short_url_code': short_url})
         }
